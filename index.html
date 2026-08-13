@@ -43,4 +43,67 @@ $('query').addEventListener('input',search);$('types').onclick=e=>{const b=e.tar
   $('logout').onclick=()=>{localStorage.removeItem(LOGIN);showLanding();toast('로그아웃되었습니다.')};
   $('home').onclick=()=>{if(!localStorage.getItem(LOGIN)){showLanding();return}$('detailView').classList.add('hidden');$('searchView').classList.remove('hidden');$('query').value='';$('results').innerHTML='<div class="empty">학번 또는 성명을 입력하면 학생이 표시됩니다.</div>';window.scrollTo(0,0)};
   showLanding();
-})();</script></body></html>
+})();</script><!-- FIREBASE_RANKING_START -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, serverTimestamp, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAKSEr8Mvu4ITcaYq-ysReTmha0krEQDkc",
+  authDomain: "nsprize-301ee.firebaseapp.com",
+  projectId: "nsprize-301ee",
+  storageBucket: "nsprize-301ee.firebasestorage.app",
+  messagingSenderId: "539906822506",
+  appId: "1:539906822506:web:b7799b218fafadbb1c1513"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+const $ = id => document.getElementById(id);
+
+const style = document.createElement('style');
+style.textContent = `.ranking-btn{margin-left:6px;border:1px solid #b9d8f5;border-radius:18px;background:#fff;color:#174f80;padding:7px 11px;font-weight:800}.rank-box{margin-top:13px;border:1px solid #d8e2ec;border-radius:13px;overflow:hidden}.rank-head{background:#eef6ff;padding:12px;font-weight:800}.rank-row{display:flex;gap:10px;align-items:center;padding:11px 12px;border-top:1px solid #e4ebf2}.rank-no{width:23px;font-weight:900;color:#1e5b93}.rank-name{flex:1}.rank-score{font-weight:900}.rank-score.plus{color:#16803d}.rank-score.minus{color:#c62828}.rank-note{padding:17px;color:#62758a;text-align:center;font-size:13px}`;
+document.head.append(style);
+const topActions = document.querySelector('#home')?.parentElement;
+if (topActions) topActions.insertAdjacentHTML('beforeend', '<button class="ranking-btn" id="ranking">랭킹</button>');
+
+async function saveScore() {
+  const teacher = localStorage.getItem('naeseong_teacher_login_2026') || '';
+  const name = $('studentName')?.textContent?.trim();
+  const info = $('studentInfo')?.textContent || '';
+  const studentId = (info.match(/\d{4}/) || [])[0];
+  const raw = Number($('points')?.value);
+  const isReward = document.querySelector('#mode .active')?.dataset.mode === 'reward';
+  const type = document.querySelector('#types .active')?.dataset.type || '';
+  if (!teacher || !name || !studentId || !Number.isInteger(raw) || raw < 1) return;
+  try {
+    await addDoc(collection(db, 'scoreRecords'), {
+      studentId, studentName: name, teacherName: teacher,
+      points: isReward ? raw : -raw, type,
+      enteredAt: serverTimestamp(), enteredAtLocal: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Firebase 저장 실패', err);
+  }
+}
+
+// Existing page interaction remains intact; this listener copies each completed entry to Firestore.
+$('add')?.addEventListener('click', () => setTimeout(saveScore, 0));
+
+async function showRanking() {
+  const area = $('penaltyResults');
+  if (!area) return;
+  $('searchView').scrollIntoView({behavior:'smooth', block:'start'});
+  area.innerHTML = '<div class="rank-note">랭킹을 불러오는 중입니다.</div>';
+  try {
+    const snapshot = await getDocs(query(collection(db, 'scoreRecords'), orderBy('enteredAtLocal', 'desc'), limit(5000)));
+    const sums = new Map();
+    snapshot.forEach(doc => { const r=doc.data(), prior=sums.get(r.studentId)||{name:r.studentName,id:r.studentId,score:0}; prior.score += Number(r.points)||0; sums.set(r.studentId,prior); });
+    const ranks = [...sums.values()].sort((a,b)=>b.score-a.score || a.id.localeCompare(b.id));
+    area.innerHTML = '<div class="rank-box"><div class="rank-head">상·벌점 종합 랭킹</div>' + (ranks.length ? ranks.map((r,i)=>`<div class="rank-row"><span class="rank-no">${i+1}</span><span class="rank-name"><b>${r.name}</b><br><small>${r.id}</small></span><span class="rank-score ${r.score>=0?'plus':'minus'}">${r.score>0?'+':''}${r.score}점</span></div>`).join('') : '<div class="rank-note">아직 저장된 기록이 없습니다.</div>') + '</div>';
+  } catch (err) {
+    console.error(err); area.innerHTML = '<div class="rank-note">랭킹을 불러오지 못했습니다. Firestore 데이터베이스와 보안 규칙을 확인해 주세요.</div>';
+  }
+}
+$('ranking')?.addEventListener('click', showRanking);
+</script>
+<!-- FIREBASE_RANKING_END -->
+</body></html>
